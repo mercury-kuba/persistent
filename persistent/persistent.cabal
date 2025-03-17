@@ -1,5 +1,5 @@
 name:            persistent
-version:         2.14.6.3
+version:         2.15.0.0
 license:         MIT
 license-file:    LICENSE
 author:          Michael Snoyman <michael@snoyman.com>
@@ -65,6 +65,7 @@ library
         Database.Persist.ImplicitIdDef
         Database.Persist.ImplicitIdDef.Internal
         Database.Persist.TH
+        Database.Persist.TH.Internal
 
         Database.Persist.Quasi
         Database.Persist.Quasi.Internal
@@ -95,6 +96,7 @@ library
 
     other-modules:
         Database.Persist.Types.Base
+        Database.Persist.Types.Span
 
         Database.Persist.Sql.Internal
         Database.Persist.Sql.Types
@@ -157,7 +159,9 @@ test-suite test
     hs-source-dirs:
         test/
 
-    ghc-options: -Wall
+    -- don't warn on partial matches, they're all over the place in the
+    -- testsuite and if they crash they will just fail the test.
+    ghc-options: -Wall -Wno-incomplete-uni-patterns
 
     default-extensions: FlexibleContexts
                       , MultiParamTypeClasses

@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 module Models where
 
 import Data.Monoid
@@ -7,6 +8,7 @@ import qualified Data.Text as Text
 import Database.Persist.Quasi
 import Database.Persist.Quasi.Internal
 import Database.Persist.TH
+import Database.Persist.TH.Internal
 import Database.Persist.Sql
 
 -- TODO: we use lookupName and reify etc which breaks in IO. somehow need to
@@ -18,7 +20,7 @@ parseReferences' :: String -> IO Exp
 parseReferences' = runQ . parseReferencesQ
 
 parseReferencesQ :: String -> Q Exp
-parseReferencesQ = parseReferences lowerCaseSettings . Text.pack
+parseReferencesQ = parseReferences lowerCaseSettings . pure . (Nothing,) . Text.pack
 
 -- | # of models, # of fields
 mkModels :: Int -> Int -> String
