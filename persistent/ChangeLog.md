@@ -1,5 +1,11 @@
 # Changelog for persistent
 
+# 2.15.0.1
+
+* [#1575](https://github.com/yesodweb/persistent/pull/1575)
+    * Fix benchmark build for GHC 9.8-9.12
+    * Support `template-haskell` up to 2.24
+
 # 2.15.0.0
 
 * [#1569](https://github.com/yesodweb/persistent/pull/1569)
