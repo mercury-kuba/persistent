@@ -8,7 +8,6 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-
   outputs = { self, nixpkgs, flake-utils, haskellNix }:
     flake-utils.lib.eachDefaultSystem (system:
       let
@@ -32,7 +31,13 @@
                   ghcid = "latest";
                   haskell-language-server = "latest";
                 };
-                buildInputs = with pkgs; [ mariadb postgresql redis sqlite ];
+                buildInputs = with pkgs; [
+                  mariadb
+                  mariadb-connector-c.dev
+                  postgresql
+                  redis
+                  sqlite
+                ];
               };
               modules = [{
                 packages."mysql".components.library = with pkgs; {
