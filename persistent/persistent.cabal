@@ -80,6 +80,8 @@ library
     Database.Persist.Names
     Database.Persist.PersistValue
     Database.Persist.Quasi
+    Database.Persist.Quasi.PersistSettings
+    Database.Persist.Quasi.PersistSettings.Internal
     Database.Persist.Quasi.Internal
     Database.Persist.Quasi.Internal.ModelParser
     Database.Persist.Sql

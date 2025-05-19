@@ -118,7 +118,7 @@ import GHC.TypeLits
 import Instances.TH.Lift ()
     -- Bring `Lift (fmap k v)` instance into scope, as well as `Lift Text`
     -- instance on pre-1.2.4 versions of `text`
-import Data.Foldable (asum, toList)
+import Data.Foldable (asum, toList, traverse_)
 import qualified Data.Set as Set
 import Language.Haskell.TH.Lib
        (appT, conE, conK, conT, litT, strTyLit, varE, varP, varT)
@@ -131,6 +131,7 @@ import Web.HttpApiData (FromHttpApiData(..), ToHttpApiData(..))
 import Web.PathPieces (PathPiece(..))
 
 import Database.Persist
+import Database.Persist.Quasi.PersistSettings
 import Database.Persist.Class.PersistEntity
 import Database.Persist.Quasi
 import Database.Persist.Quasi.Internal
@@ -283,10 +284,11 @@ embedEntityDefsMap existingEnts rawEnts =
 -- @since 2.16.0.0
 parseReferences :: PersistSettings -> [(Maybe SourceLoc, Text)] -> Q Exp
 parseReferences ps s = do
-  let cpr = parse ps s
-  case cpr of
+  let (warnings, res) = parse ps s
+  traverse_ (reportWarning . parserWarningMessage) $ warnings
+  case res of
     Left errs -> fail $ renderErrors errs
-    Right res -> lift res
+    Right r -> lift r
 
 preprocessUnboundDefs
     :: [EntityDef]
@@ -1214,7 +1216,6 @@ data MkPersistSettings = MkPersistSettings
     --   , companyUserKeyUserId :: UserId
     --   }
     -- @
-
     -- Default: False
     --
     -- @since 2.14.2.0

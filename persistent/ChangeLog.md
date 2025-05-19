@@ -1,11 +1,16 @@
 # Changelog for persistent
 
-# 2.16.0.0 [unreleased]
+# 2.16.0.0
 
 * [#1584](https://github.com/yesodweb/persistent/pull/1584)
     * Rename `Span` to `SourceSpan`
     * Parse entity definitions using Megaparsec.
     * Support Haddock-style multiline pre-comments.
+* [#1589](https://github.com/yesodweb/persistent/pull/1589)
+    * Support configurable parse errors and warnings
+
+# 2.15.1.1
+
 * [#1585](https://github.com/yesodweb/persistent/pull/1585)
     * Support parsing PersistField UTCTime from text with timezone, e.g. "2025-04-12T06:53:42Z".
       This is needed for Sqlite, which has no native datetime support but uses e.g. TEXT.
