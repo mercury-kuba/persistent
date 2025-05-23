@@ -1,5 +1,13 @@
 # Changelog for persistent
 
+# 2.17.0.0
+
+* [#1595](https://github.com/yesodweb/persistent/pull/1595)
+    * Add `tabulateEntityApply` to `PersistEntity` class similar to
+      `tabulateEntityA` but that works on `Apply` type instead of `Applicative`.
+      This allows you to use `foldMap1` and other non-empty structures with
+      tabulating and manipulating records.
+
 # 2.16.0.0
 
 * [#1584](https://github.com/yesodweb/persistent/pull/1584)
