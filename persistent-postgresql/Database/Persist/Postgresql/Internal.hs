@@ -587,8 +587,7 @@ getAddReference allDefs entity cname cr@ColumnReference{crTableName = s, crConst
     pure $
         AlterColumn
             table
-            ( AddReference s constraintName [cname] id_ (crFieldCascade cr)
-            )
+            (AddReference s constraintName [cname] id_ (crFieldCascade cr))
   where
     table = getEntityDBName entity
     id_ =
