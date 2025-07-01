@@ -22,6 +22,10 @@ module Database.Persist.Postgresql.Internal
     , safeToRemove
     , postgresMkColumns
     , getAlters
+    , escapeC
+    , escapeE
+    , escapeF
+    , escape
     ) where
 
 import qualified Database.PostgreSQL.Simple as PG

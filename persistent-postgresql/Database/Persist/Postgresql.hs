@@ -1098,24 +1098,6 @@ tableName = escapeE . tableDBName
 fieldName :: (PersistEntity record) => EntityField record typ -> Text
 fieldName = escapeF . fieldDBName
 
-escapeC :: ConstraintNameDB -> Text
-escapeC = escapeWith escape
-
-escapeE :: EntityNameDB -> Text
-escapeE = escapeWith escape
-
-escapeF :: FieldNameDB -> Text
-escapeF = escapeWith escape
-
-
-escape :: Text -> Text
-escape s =
-    T.pack $ '"' : go (T.unpack s) ++ "\""
-  where
-    go "" = ""
-    go ('"':xs) = "\"\"" ++ go xs
-    go (x:xs) = x : go xs
-
 -- | Information required to connect to a PostgreSQL database
 -- using @persistent@'s generic facilities.  These values are the
 -- same that are given to 'withPostgresqlPool'.
@@ -1226,7 +1208,6 @@ defaultPostgresConfHooks = PostgresConfHooks
   { pgConfHooksGetServerVersion = getServerVersionNonEmpty
   , pgConfHooksAfterCreate = const $ pure ()
   }
-
 
 mockMigrate :: [EntityDef]
          -> (Text -> IO Statement)
