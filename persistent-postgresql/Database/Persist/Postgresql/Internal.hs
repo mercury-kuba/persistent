@@ -339,7 +339,7 @@ data AlterTable
 -- | Represents a change to a Postgres DB in a statement.
 --
 -- @since 2.17.0.0
-data AlterDB = AddTable Text EntityNameDB EntityIdDef 
+data AlterDB = AddTable EntityNameDB EntityIdDef [Column]
              | AlterColumn EntityNameDB AlterColumn
              | AlterTable EntityNameDB AlterTable
              deriving Show
@@ -394,7 +394,7 @@ mockMigrateStructured allDefs entity = do
 -- @since 2.17.0.0
 addTable :: [Column] -> EntityDef -> AlterDB
 addTable cols entity =
-    AddTable rawText name
+    AddTable name entityId nonIdCols
   where
     nonIdCols =
         case entityPrimary entity of
@@ -406,36 +406,8 @@ addTable cols entity =
         keepField c =
             Just (cName c) /= fmap fieldDB (getEntityIdField entity)
             && not (safeToRemove entity (cName c))
-
-    name =
-        getEntityDBName entity
-    idtxt =
-        case getEntityId entity of
-            EntityIdNaturalKey pdef ->
-                T.concat
-                    [ " PRIMARY KEY ("
-                    , T.intercalate "," $ map (escapeF . fieldDB) $ NEL.toList $ compositeFields pdef
-                    , ")"
-                    ]
-            EntityIdField field ->
-                let defText = defaultAttribute $ fieldAttrs field
-                    sType = fieldSqlType field
-                in  T.concat
-                        [ escapeF $ fieldDB field
-                        , maySerial sType defText
-                        , " PRIMARY KEY UNIQUE"
-                        , mayDefault defText
-                        ]
-    rawText = T.concat
-        -- Lower case e: see Database.Persist.Sql.Migration
-        [ "CREATe TABLE " -- DO NOT FIX THE CAPITALIZATION!
-        , escapeE name
-        , "("
-        , idtxt
-        , if null nonIdCols then "" else ","
-        , T.intercalate "," $ map showColumn nonIdCols
-        , ")"
-        ]
+    entityId = getEntityId entity
+    name = getEntityDBName entity
 
 maySerial :: SqlType -> Maybe Text -> Text
 maySerial SqlInt64 Nothing = " SERIAL8 "
@@ -634,7 +606,35 @@ escape s =
     go (x:xs) = x : go xs
 
 showAlterDb :: AlterDB -> (Bool, Text)
-showAlterDb (AddTable s _) = (False, s)
+showAlterDb (AddTable name entityId nonIdCols) = (False, rawText)
+  where
+    idtxt =
+        case entityId of
+            EntityIdNaturalKey pdef ->
+                T.concat
+                    [ " PRIMARY KEY ("
+                    , T.intercalate "," $ map (escapeF . fieldDB) $ NEL.toList $ compositeFields pdef
+                    , ")"
+                    ]
+            EntityIdField field ->
+                let defText = defaultAttribute $ fieldAttrs field
+                    sType = fieldSqlType field
+                in  T.concat
+                        [ escapeF $ fieldDB field
+                        , maySerial sType defText
+                        , " PRIMARY KEY UNIQUE"
+                        , mayDefault defText
+                        ]
+    rawText = T.concat
+        -- Lower case e: see Database.Persist.Sql.Migration
+        [ "CREATe TABLE " -- DO NOT FIX THE CAPITALIZATION!
+        , escapeE name
+        , "("
+        , idtxt
+        , if null nonIdCols then "" else ","
+        , T.intercalate "," $ map showColumn nonIdCols
+        , ")"
+        ]
 
 showAlterDb (AlterColumn t ac) =
     (isUnsafe ac, showAlter t ac)
