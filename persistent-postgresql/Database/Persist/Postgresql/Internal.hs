@@ -331,12 +331,13 @@ instance PersistFieldSql PgInterval where
 
 -- | Indicates whether a Postgres Column is safe to drop.
 --
--- @since 2.17.0.0
-type SafeToRemove = Bool
+-- @since 2.17.1.0
+newtype SafeToRemove = SafeToRemove Bool
+    deriving (Show)
 
 -- | Represents a change to a Postgres column in a DB statement.
 --
--- @since 2.17.0.0
+-- @since 2.17.1.0
 data AlterColumn
     = ChangeType Column SqlType Text
     | IsNull Column
@@ -352,7 +353,7 @@ data AlterColumn
 
 -- | Represents a change to a Postgres table in a DB statement.
 --
--- @since 2.17.0.0
+-- @since 2.17.1.0
 data AlterTable
     = AddUniqueConstraint ConstraintNameDB [FieldNameDB]
     | DropConstraint ConstraintNameDB
@@ -360,7 +361,7 @@ data AlterTable
 
 -- | Represents a change to a Postgres DB in a statement.
 --
--- @since 2.17.0.0
+-- @since 2.17.1.0
 data AlterDB
     = AddTable EntityNameDB EntityIdDef [Column]
     | AlterColumn EntityNameDB AlterColumn
@@ -372,7 +373,7 @@ data AlterDB
 -- current state in the database to the state described in
 -- Haskell.
 --
--- @since 2.17.0.0
+-- @since 2.17.1.0
 mockMigrateStructured
     :: [EntityDef]
     -> EntityDef
@@ -418,7 +419,7 @@ mockMigrateStructured allDefs entity = do
 -- DB changes required to migrate the Entity from its current state
 -- in the database to the state described in Haskell.
 --
--- @since 2.17.0.0
+-- @since 2.17.1.0
 addTable :: [Column] -> EntityDef -> AlterDB
 addTable cols entity =
     AddTable name entityId nonIdCols
@@ -455,7 +456,7 @@ getAlters defs def (c1, u1) (c2, u2) =
     (getAltersC c1 c2, getAltersU u1 u2)
   where
     getAltersC [] old =
-        map (\x -> Drop x $ safeToRemove def $ cName x) old
+        map (\x -> Drop x $ SafeToRemove $ safeToRemove def $ cName x) old
     getAltersC (new : news) old =
         let
             (alters, old') = findAlters defs def new old
@@ -671,7 +672,7 @@ showAlterDb (AddTable name entityId nonIdCols) = (False, rawText)
 showAlterDb (AlterColumn t ac) =
     (isUnsafe ac, showAlter t ac)
   where
-    isUnsafe (Drop _ safeRemove) = not safeRemove
+    isUnsafe (Drop _ (SafeToRemove safeRemove)) = not safeRemove
     isUnsafe _ = False
 showAlterDb (AlterTable t at) = (False, showAlterTable t at)
 
@@ -895,7 +896,7 @@ findAlters defs edef col@(Column name isNull sqltype def _gen _defConstraintName
                                 Just s -> [Default col s]
                     dropSafe =
                         if safeToRemove edef name
-                            then error "wtf" [Drop col True]
+                            then error "wtf" [Drop col (SafeToRemove True)]
                             else []
                  in
                     ( modRef ++ modDef ++ modNull ++ modType ++ dropSafe
