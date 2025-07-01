@@ -767,16 +767,18 @@ mkForeignAlt
     :: EntityDef
     -> ForeignDef
     -> Maybe AlterDB
-mkForeignAlt entity fdef = pure $ AlterColumn tableName_ addReference
+mkForeignAlt entity fdef = case childfields of 
+    [] -> Nothing 
+    f : r ->  Just $ AlterColumn tableName_ (addReference)
+            where 
+                addReference = AddReference
+                                (foreignRefTableDBName fdef)
+                                constraintName
+                                (f NEL.:| r)
+                                escapedParentFields
+                                (foreignFieldCascade fdef)
   where
     tableName_ = getEntityDBName entity
-    addReference =
-        AddReference
-            (foreignRefTableDBName fdef)
-            constraintName
-            childfields
-            escapedParentFields
-            (foreignFieldCascade fdef)
     constraintName =
         foreignConstraintNameDBName fdef
     (childfields, parentfields) =

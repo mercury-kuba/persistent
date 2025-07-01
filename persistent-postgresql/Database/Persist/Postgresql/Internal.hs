@@ -347,7 +347,7 @@ data AlterColumn
     | Default Column Text
     | NoDefault Column
     | UpdateNullToValue Column Text
-    | AddReference EntityNameDB ConstraintNameDB [FieldNameDB] [Text] FieldCascade
+    | AddReference EntityNameDB ConstraintNameDB (NEL.NonEmpty FieldNameDB) [Text] FieldCascade
     | DropReference ConstraintNameDB
     deriving (Show)
 
@@ -586,7 +586,7 @@ getAddReference allDefs entity cname cr@ColumnReference{crTableName = s, crConst
     pure $
         AlterColumn
             table
-            (AddReference s constraintName [cname] id_ (crFieldCascade cr))
+            (AddReference s constraintName (cname NEL.:| []) id_ (crFieldCascade cr))
   where
     table = getEntityDBName entity
     id_ =
@@ -600,16 +600,19 @@ mkForeignAlt
     :: EntityDef
     -> ForeignDef
     -> Maybe AlterDB
-mkForeignAlt entity fdef = pure $ AlterColumn tableName_ addReference
+mkForeignAlt entity fdef = case NEL.nonEmpty childfields of 
+        Nothing -> Nothing 
+        Just childfields' -> Just $ AlterColumn tableName_ addReference
+                where 
+                    addReference = 
+                            AddReference
+                                (foreignRefTableDBName fdef)
+                                constraintName
+                                childfields'
+                                escapedParentFields
+                                (foreignFieldCascade fdef)
   where
     tableName_ = getEntityDBName entity
-    addReference =
-        AddReference
-            (foreignRefTableDBName fdef)
-            constraintName
-            childfields
-            escapedParentFields
-            (foreignFieldCascade fdef)
     constraintName =
         foreignConstraintNameDBName fdef
     (childfields, parentfields) =
@@ -770,7 +773,7 @@ showAlter table (AddReference reftable fkeyname t2 id2 cascade) =
         , " ADD CONSTRAINT "
         , escapeC fkeyname
         , " FOREIGN KEY("
-        , T.intercalate "," $ map escapeF t2
+        , T.intercalate "," $ map escapeF $  NEL.toList t2
         , ") REFERENCES "
         , escapeE reftable
         , "("
@@ -845,7 +848,7 @@ findAlters defs edef col@(Column name isNull sqltype def _gen _defConstraintName
                                     [ AddReference
                                         (crTableName colRef)
                                         (crConstraintName colRef)
-                                        [name]
+                                        (name NEL.:| [])
                                         (NEL.toList $ Util.dbIdColumnsEsc escapeF refdef)
                                         (crFieldCascade colRef)
                                     ]
