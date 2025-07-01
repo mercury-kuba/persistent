@@ -342,11 +342,11 @@ data AlterColumn
     = ChangeType Column SqlType Text
     | IsNull Column
     | NotNull Column
-    | Add' Column
+    | AddColumn Column
     | Drop Column SafeToRemove
     | Default Column Text
     | NoDefault Column
-    | Update' Column Text
+    | UpdateNullToValue Column Text
     | AddReference EntityNameDB ConstraintNameDB [FieldNameDB] [Text] FieldCascade
     | DropReference ConstraintNameDB
     deriving (Show)
@@ -722,7 +722,7 @@ showAlter table (NotNull c) =
         , escapeF (cName c)
         , " SET NOT NULL"
         ]
-showAlter table (Add' col) =
+showAlter table (AddColumn col) =
     T.concat
         [ "ALTER TABLE "
         , escapeE table
@@ -753,7 +753,7 @@ showAlter table (NoDefault c) =
         , escapeF (cName c)
         , " DROP DEFAULT"
         ]
-showAlter table (Update' c s) =
+showAlter table (UpdateNullToValue c s) =
     T.concat
         [ "UPDATE "
         , escapeE table
@@ -831,7 +831,7 @@ findAlters
 findAlters defs edef col@(Column name isNull sqltype def _gen _defConstraintName _maxLen ref) cols =
     case List.find (\c -> cName c == name) cols of
         Nothing ->
-            ([Add' col], cols)
+            ([AddColumn col], cols)
         Just
             (Column _oldName isNull' sqltype' def' _gen' _defConstraintName' _maxLen' ref') ->
                 let
@@ -869,7 +869,7 @@ findAlters defs edef col@(Column name isNull sqltype def _gen _defConstraintName
                             let
                                 up = case def of
                                     Nothing -> id
-                                    Just s -> (:) (Update' col s)
+                                    Just s -> (:) (UpdateNullToValue col s)
                              in
                                 up [NotNull col]
                         _ -> []
