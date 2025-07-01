@@ -5,6 +5,10 @@ module Database.Persist.Postgresql.Internal
     ( P(..)
     , PgInterval(..)
     , getGetter
+    , AlterDB (..)
+    , AlterTable (..)
+    , AlterColumn (..)
+    , SafeToRemove
     ) where
 
 import qualified Database.PostgreSQL.Simple as PG
@@ -14,6 +18,7 @@ import qualified Database.PostgreSQL.Simple.ToField as PGTF
 import qualified Database.PostgreSQL.Simple.TypeInfo.Static as PS
 import qualified Database.PostgreSQL.Simple.Types as PG
 
+import Database.Persist.Sql
 import qualified Blaze.ByteString.Builder.Char8 as BBB
 import qualified Data.Attoparsec.ByteString.Char8 as P
 import Data.Bits ((.&.))
@@ -281,4 +286,27 @@ instance PersistField PgInterval where
 instance PersistFieldSql PgInterval where
   sqlType _ = SqlOther "interval"
 
+type SafeToRemove = Bool
 
+data AlterColumn
+    = ChangeType Column SqlType Text
+    | IsNull Column
+    | NotNull Column
+    | Add' Column
+    | Drop Column SafeToRemove
+    | Default Column Text
+    | NoDefault Column
+    | Update' Column Text
+    | AddReference EntityNameDB ConstraintNameDB [FieldNameDB] [Text] FieldCascade
+    | DropReference ConstraintNameDB
+    deriving Show
+
+data AlterTable
+    = AddUniqueConstraint ConstraintNameDB [FieldNameDB]
+    | DropConstraint ConstraintNameDB
+    deriving Show
+
+data AlterDB = AddTable Text
+             | AlterColumn EntityNameDB AlterColumn
+             | AlterTable EntityNameDB AlterTable
+             deriving Show

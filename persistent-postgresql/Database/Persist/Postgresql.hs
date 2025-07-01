@@ -762,31 +762,6 @@ mayDefault def = case def of
     Nothing -> ""
     Just d -> " DEFAULT " <> d
 
-type SafeToRemove = Bool
-
-data AlterColumn
-    = ChangeType Column SqlType Text
-    | IsNull Column
-    | NotNull Column
-    | Add' Column
-    | Drop Column SafeToRemove
-    | Default Column Text
-    | NoDefault Column
-    | Update' Column Text
-    | AddReference EntityNameDB ConstraintNameDB [FieldNameDB] [Text] FieldCascade
-    | DropReference ConstraintNameDB
-    deriving Show
-
-data AlterTable
-    = AddUniqueConstraint ConstraintNameDB [FieldNameDB]
-    | DropConstraint ConstraintNameDB
-    deriving Show
-
-data AlterDB = AddTable Text
-             | AlterColumn EntityNameDB AlterColumn
-             | AlterTable EntityNameDB AlterTable
-             deriving Show
-
 -- | Returns all of the columns in the given table currently in the database.
 getColumns :: (Text -> IO Statement)
            -> EntityDef -> [Column]
@@ -1557,7 +1532,12 @@ mockMigrate :: [EntityDef]
          -> (Text -> IO Statement)
          -> EntityDef
          -> IO (Either [Text] [(Bool, Text)])
-mockMigrate allDefs _ entity = fmap (fmap $ map showAlterDb) $ do
+mockMigrate allDefs _ entity = fmap (fmap $ map showAlterDb) $ mockMigrateStructured allDefs entity
+
+mockMigrateStructured :: [EntityDef]
+         -> EntityDef
+         -> IO (Either [Text] [AlterDB])
+mockMigrateStructured allDefs entity = do
     case partitionEithers [] of
         ([], old'') -> return $ Right $ migrationText False old''
         (errs, _) -> return $ Left errs
