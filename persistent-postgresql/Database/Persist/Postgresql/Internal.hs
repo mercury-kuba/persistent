@@ -781,8 +781,6 @@ showSqlType (SqlOther (T.toLower -> "integer")) = "INT4"
 
 showSqlType (SqlOther t) = t
 
-
-
 findAlters
     :: [EntityDef]
     -- ^ The list of all entity definitions that persistent is aware of.
