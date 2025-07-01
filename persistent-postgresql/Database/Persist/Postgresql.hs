@@ -868,10 +868,10 @@ getColumns getter def cols = do
                     error $ "unexpected datatype returned for postgres o=" ++ show o
     helperU = do
         rows <- getAll .| CL.consume
-        return $
-            map
-                (Right . Right . (ConstraintNameDB . fst . head &&& map (FieldNameDB . snd))) $
-                groupBy ((==) `on` fst) rows
+        return
+            $ map
+                (Right . Right . (ConstraintNameDB . fst . head &&& map (FieldNameDB . snd)))
+            $ groupBy ((==) `on` fst) rows
     processColumns =
         CL.mapM $ \x'@((PersistText cname) : _) -> do
             col <-
@@ -1019,8 +1019,8 @@ getColumn
                         , PersistText delRule
                         ]
                     ] ->
-                    return $
-                        Just (EntityNameDB table, ConstraintNameDB constraint, updRule, delRule)
+                        return $
+                            Just (EntityNameDB table, ConstraintNameDB constraint, updRule, delRule)
                 xs ->
                     error $
                         mconcat
@@ -1533,10 +1533,10 @@ mkBulkUpsertQuery records conn fieldValues updates filters uniqDef =
     copyUnlessValues = map snd fieldsToMaybeCopy
     recordValues = concatMap (map toPersistValue . toPersistFields) records
     recordPlaceholders =
-        Util.commaSeparated $
-            map
-                (Util.parenWrapped . Util.commaSeparated . map (const "?") . toPersistFields) $
-                records
+        Util.commaSeparated
+            $ map
+                (Util.parenWrapped . Util.commaSeparated . map (const "?") . toPersistFields)
+            $ records
     mkCondFieldSet n _ =
         T.concat
             [ n

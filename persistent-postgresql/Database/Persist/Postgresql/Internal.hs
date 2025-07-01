@@ -834,71 +834,71 @@ findAlters defs edef col@(Column name isNull sqltype def _gen _defConstraintName
             ([Add' col], cols)
         Just
             (Column _oldName isNull' sqltype' def' _gen' _defConstraintName' _maxLen' ref') ->
-            let
-                refDrop Nothing = []
-                refDrop (Just ColumnReference{crConstraintName = cname}) =
-                    [DropReference cname]
+                let
+                    refDrop Nothing = []
+                    refDrop (Just ColumnReference{crConstraintName = cname}) =
+                        [DropReference cname]
 
-                refAdd Nothing = []
-                refAdd (Just colRef) =
-                    case find ((== crTableName colRef) . getEntityDBName) defs of
-                        Just refdef
-                            | Just _oldName /= fmap fieldDB (getEntityIdField edef) ->
-                                [ AddReference
-                                    (crTableName colRef)
-                                    (crConstraintName colRef)
-                                    [name]
-                                    (NEL.toList $ Util.dbIdColumnsEsc escapeF refdef)
-                                    (crFieldCascade colRef)
-                                ]
-                        Just _ -> []
-                        Nothing ->
-                            error $
-                                "could not find the entityDef for reftable["
-                                    ++ show (crTableName colRef)
-                                    ++ "]"
-                modRef =
-                    if equivalentRef ref ref'
-                        then []
-                        else refDrop ref' ++ refAdd ref
-                modNull = case (isNull, isNull') of
-                    (True, False) -> do
-                        guard $ Just name /= fmap fieldDB (getEntityIdField edef)
-                        pure (IsNull col)
-                    (False, True) ->
-                        let
-                            up = case def of
-                                Nothing -> id
-                                Just s -> (:) (Update' col s)
-                         in
-                            up [NotNull col]
-                    _ -> []
-                modType
-                    | sqlTypeEq sqltype sqltype' = []
-                    -- When converting from Persistent pre-2.0 databases, we
-                    -- need to make sure that TIMESTAMP WITHOUT TIME ZONE is
-                    -- treated as UTC.
-                    | sqltype == SqlDayTime && sqltype' == SqlOther "timestamp" =
-                        [ ChangeType col sqltype $
-                            T.concat
-                                [ " USING "
-                                , escapeF name
-                                , " AT TIME ZONE 'UTC'"
-                                ]
-                        ]
-                    | otherwise = [ChangeType col sqltype ""]
-                modDef =
-                    if def == def'
-                        || isJust (T.stripPrefix "nextval" =<< def')
-                        then []
-                        else case def of
-                            Nothing -> [NoDefault col]
-                            Just s -> [Default col s]
-                dropSafe =
-                    if safeToRemove edef name
-                        then error "wtf" [Drop col True]
-                        else []
-             in
-                ( modRef ++ modDef ++ modNull ++ modType ++ dropSafe
-                , filter (\c -> cName c /= name) cols
-                )
+                    refAdd Nothing = []
+                    refAdd (Just colRef) =
+                        case find ((== crTableName colRef) . getEntityDBName) defs of
+                            Just refdef
+                                | Just _oldName /= fmap fieldDB (getEntityIdField edef) ->
+                                    [ AddReference
+                                        (crTableName colRef)
+                                        (crConstraintName colRef)
+                                        [name]
+                                        (NEL.toList $ Util.dbIdColumnsEsc escapeF refdef)
+                                        (crFieldCascade colRef)
+                                    ]
+                            Just _ -> []
+                            Nothing ->
+                                error $
+                                    "could not find the entityDef for reftable["
+                                        ++ show (crTableName colRef)
+                                        ++ "]"
+                    modRef =
+                        if equivalentRef ref ref'
+                            then []
+                            else refDrop ref' ++ refAdd ref
+                    modNull = case (isNull, isNull') of
+                        (True, False) -> do
+                            guard $ Just name /= fmap fieldDB (getEntityIdField edef)
+                            pure (IsNull col)
+                        (False, True) ->
+                            let
+                                up = case def of
+                                    Nothing -> id
+                                    Just s -> (:) (Update' col s)
+                             in
+                                up [NotNull col]
+                        _ -> []
+                    modType
+                        | sqlTypeEq sqltype sqltype' = []
+                        -- When converting from Persistent pre-2.0 databases, we
+                        -- need to make sure that TIMESTAMP WITHOUT TIME ZONE is
+                        -- treated as UTC.
+                        | sqltype == SqlDayTime && sqltype' == SqlOther "timestamp" =
+                            [ ChangeType col sqltype $
+                                T.concat
+                                    [ " USING "
+                                    , escapeF name
+                                    , " AT TIME ZONE 'UTC'"
+                                    ]
+                            ]
+                        | otherwise = [ChangeType col sqltype ""]
+                    modDef =
+                        if def == def'
+                            || isJust (T.stripPrefix "nextval" =<< def')
+                            then []
+                            else case def of
+                                Nothing -> [NoDefault col]
+                                Just s -> [Default col s]
+                    dropSafe =
+                        if safeToRemove edef name
+                            then error "wtf" [Drop col True]
+                            else []
+                 in
+                    ( modRef ++ modDef ++ modNull ++ modType ++ dropSafe
+                    , filter (\c -> cName c /= name) cols
+                    )
