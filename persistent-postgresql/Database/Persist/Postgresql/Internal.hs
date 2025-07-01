@@ -307,8 +307,14 @@ instance PersistField PgInterval where
 instance PersistFieldSql PgInterval where
   sqlType _ = SqlOther "interval"
 
+-- | Indicates whether a Postgres Column is safe to drop.
+--
+-- @since 2.17.0.0
 type SafeToRemove = Bool
 
+-- | Represents a change to a Postgres column in a DB statement.
+--
+-- @since 2.17.0.0
 data AlterColumn
     = ChangeType Column SqlType Text
     | IsNull Column
@@ -322,16 +328,28 @@ data AlterColumn
     | DropReference ConstraintNameDB
     deriving Show
 
+-- | Represents a change to a Postgres table in a DB statement.
+--
+-- @since 2.17.0.0
 data AlterTable
     = AddUniqueConstraint ConstraintNameDB [FieldNameDB]
     | DropConstraint ConstraintNameDB
     deriving Show
 
-data AlterDB = AddTable Text
+-- | Represents a change to a Postgres DB in a statement.
+--
+-- @since 2.17.0.0
+data AlterDB = AddTable Text EntityNameDB EntityIdDef 
              | AlterColumn EntityNameDB AlterColumn
              | AlterTable EntityNameDB AlterTable
              deriving Show
 
+-- | Returns a structured representation of all of the 
+-- DB changes required to migrate the Entity from its 
+-- current state in the database to the state described in 
+-- Haskell.
+--
+-- @since 2.17.0.0
 mockMigrateStructured :: [EntityDef]
          -> EntityDef
          -> IO (Either [Text] [AlterDB])
@@ -369,20 +387,14 @@ mockMigrateStructured allDefs entity = do
                 newcols
         foreignsAlt = mapMaybe (mkForeignAlt entity) fdefs
 
-
-
+-- | Returns a structured representation of all of the 
+-- DB changes required to migrate the Entity from its current state
+-- in the database to the state described in Haskell.
+--
+-- @since 2.17.0.0
 addTable :: [Column] -> EntityDef -> AlterDB
 addTable cols entity =
-    AddTable $ T.concat
-        -- Lower case e: see Database.Persist.Sql.Migration
-        [ "CREATe TABLE " -- DO NOT FIX THE CAPITALIZATION!
-        , escapeE name
-        , "("
-        , idtxt
-        , if null nonIdCols then "" else ","
-        , T.intercalate "," $ map showColumn nonIdCols
-        , ")"
-        ]
+    AddTable rawText name
   where
     nonIdCols =
         case entityPrimary entity of
@@ -414,6 +426,16 @@ addTable cols entity =
                         , " PRIMARY KEY UNIQUE"
                         , mayDefault defText
                         ]
+    rawText = T.concat
+        -- Lower case e: see Database.Persist.Sql.Migration
+        [ "CREATe TABLE " -- DO NOT FIX THE CAPITALIZATION!
+        , escapeE name
+        , "("
+        , idtxt
+        , if null nonIdCols then "" else ","
+        , T.intercalate "," $ map showColumn nonIdCols
+        , ")"
+        ]
 
 maySerial :: SqlType -> Maybe Text -> Text
 maySerial SqlInt64 Nothing = " SERIAL8 "
@@ -612,7 +634,8 @@ escape s =
     go (x:xs) = x : go xs
 
 showAlterDb :: AlterDB -> (Bool, Text)
-showAlterDb (AddTable s) = (False, s)
+showAlterDb (AddTable s _) = (False, s)
+
 showAlterDb (AlterColumn t ac) =
     (isUnsafe ac, showAlter t ac)
   where
