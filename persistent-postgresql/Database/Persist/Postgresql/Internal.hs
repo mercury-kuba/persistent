@@ -347,7 +347,12 @@ data AlterColumn
     | Default Column Text
     | NoDefault Column
     | UpdateNullToValue Column Text
-    | AddReference EntityNameDB ConstraintNameDB (NEL.NonEmpty FieldNameDB) [Text] FieldCascade
+    | AddReference
+        EntityNameDB
+        ConstraintNameDB
+        (NEL.NonEmpty FieldNameDB)
+        [Text]
+        FieldCascade
     | DropReference ConstraintNameDB
     deriving (Show)
 
@@ -378,7 +383,7 @@ mockMigrateStructured
     :: [EntityDef]
     -> EntityDef
     -> IO (Either [Text] [AlterDB])
-mockMigrateStructured allDefs entity = 
+mockMigrateStructured allDefs entity =
     return $ Right $ migrationText False []
   where
     name = getEntityDBName entity
@@ -600,17 +605,17 @@ mkForeignAlt
     :: EntityDef
     -> ForeignDef
     -> Maybe AlterDB
-mkForeignAlt entity fdef = case NEL.nonEmpty childfields of 
-        Nothing -> Nothing 
-        Just childfields' -> Just $ AlterColumn tableName_ addReference
-                where 
-                    addReference = 
-                            AddReference
-                                (foreignRefTableDBName fdef)
-                                constraintName
-                                childfields'
-                                escapedParentFields
-                                (foreignFieldCascade fdef)
+mkForeignAlt entity fdef = case NEL.nonEmpty childfields of
+    Nothing -> Nothing
+    Just childfields' -> Just $ AlterColumn tableName_ addReference
+      where
+        addReference =
+            AddReference
+                (foreignRefTableDBName fdef)
+                constraintName
+                childfields'
+                escapedParentFields
+                (foreignFieldCascade fdef)
   where
     tableName_ = getEntityDBName entity
     constraintName =
@@ -773,7 +778,7 @@ showAlter table (AddReference reftable fkeyname t2 id2 cascade) =
         , " ADD CONSTRAINT "
         , escapeC fkeyname
         , " FOREIGN KEY("
-        , T.intercalate "," $ map escapeF $  NEL.toList t2
+        , T.intercalate "," $ map escapeF $ NEL.toList t2
         , ") REFERENCES "
         , escapeE reftable
         , "("
