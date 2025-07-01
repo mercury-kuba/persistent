@@ -17,12 +17,14 @@ module Database.Persist.Postgresql.Internal
     , mayDefault
     , showSqlType
     , showColumn 
+    , showAlter
+    , showAlterDb
+    , showAlterTable
     , getAddReference
     , udToPair
     , safeToRemove
     , postgresMkColumns
     , getAlters
-    , escapeC
     , escapeE
     , escapeF
     , escape
@@ -608,6 +610,120 @@ escape s =
     go "" = ""
     go ('"':xs) = "\"\"" ++ go xs
     go (x:xs) = x : go xs
+
+showAlterDb :: AlterDB -> (Bool, Text)
+showAlterDb (AddTable s) = (False, s)
+showAlterDb (AlterColumn t ac) =
+    (isUnsafe ac, showAlter t ac)
+  where
+    isUnsafe (Drop _ safeRemove) = not safeRemove
+    isUnsafe _ = False
+showAlterDb (AlterTable t at) = (False, showAlterTable t at)
+
+showAlterTable :: EntityNameDB -> AlterTable -> Text
+showAlterTable table (AddUniqueConstraint cname cols) = T.concat
+    [ "ALTER TABLE "
+    , escapeE table
+    , " ADD CONSTRAINT "
+    , escapeC cname
+    , " UNIQUE("
+    , T.intercalate "," $ map escapeF cols
+    , ")"
+    ]
+showAlterTable table (DropConstraint cname) = T.concat
+    [ "ALTER TABLE "
+    , escapeE table
+    , " DROP CONSTRAINT "
+    , escapeC cname
+    ]
+
+showAlter :: EntityNameDB -> AlterColumn -> Text
+showAlter table (ChangeType c t extra) =
+    T.concat
+        [ "ALTER TABLE "
+        , escapeE table
+        , " ALTER COLUMN "
+        , escapeF (cName c)
+        , " TYPE "
+        , showSqlType t
+        , extra
+        ]
+showAlter table (IsNull c) =
+    T.concat
+        [ "ALTER TABLE "
+        , escapeE table
+        , " ALTER COLUMN "
+        , escapeF (cName c)
+        , " DROP NOT NULL"
+        ]
+showAlter table (NotNull c) =
+    T.concat
+        [ "ALTER TABLE "
+        , escapeE table
+        , " ALTER COLUMN "
+        , escapeF (cName c)
+        , " SET NOT NULL"
+        ]
+showAlter table (Add' col) =
+    T.concat
+        [ "ALTER TABLE "
+        , escapeE table
+        , " ADD COLUMN "
+        , showColumn col
+        ]
+showAlter table (Drop c _) =
+    T.concat
+        [ "ALTER TABLE "
+        , escapeE table
+        , " DROP COLUMN "
+        , escapeF (cName c)
+        ]
+showAlter table (Default c s) =
+    T.concat
+        [ "ALTER TABLE "
+        , escapeE table
+        , " ALTER COLUMN "
+        , escapeF (cName c)
+        , " SET DEFAULT "
+        , s
+        ]
+showAlter table (NoDefault c) = T.concat
+    [ "ALTER TABLE "
+    , escapeE table
+    , " ALTER COLUMN "
+    , escapeF (cName c)
+    , " DROP DEFAULT"
+    ]
+showAlter table (Update' c s) = T.concat
+    [ "UPDATE "
+    , escapeE table
+    , " SET "
+    , escapeF (cName c)
+    , "="
+    , s
+    , " WHERE "
+    , escapeF (cName c)
+    , " IS NULL"
+    ]
+showAlter table (AddReference reftable fkeyname t2 id2 cascade) = T.concat
+    [ "ALTER TABLE "
+    , escapeE table
+    , " ADD CONSTRAINT "
+    , escapeC fkeyname
+    , " FOREIGN KEY("
+    , T.intercalate "," $ map escapeF t2
+    , ") REFERENCES "
+    , escapeE reftable
+    , "("
+    , T.intercalate "," id2
+    , ")"
+    ] <> renderFieldCascade cascade
+showAlter table (DropReference cname) = T.concat
+    [ "ALTER TABLE "
+    , escapeE table
+    , " DROP CONSTRAINT "
+    , escapeC cname
+    ]
 
 showColumn :: Column -> Text
 showColumn (Column n nu sqlType' def gen _defConstraintName _maxLen _ref) = T.concat
