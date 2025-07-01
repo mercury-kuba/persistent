@@ -378,10 +378,8 @@ mockMigrateStructured
     :: [EntityDef]
     -> EntityDef
     -> IO (Either [Text] [AlterDB])
-mockMigrateStructured allDefs entity = do
-    case partitionEithers [] of
-        ([], old'') -> return $ Right $ migrationText False old''
-        (errs, _) -> return $ Left errs
+mockMigrateStructured allDefs entity = 
+    return $ Right $ migrationText False []
   where
     name = getEntityDBName entity
     migrationText exists' old'' =
