@@ -43,6 +43,8 @@ import qualified Blaze.ByteString.Builder.Char8 as BBB
 import Control.Arrow
 import Control.Monad
 import Control.Monad.Except
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.IO.Unlift (MonadIO(..))
 import Data.Acquire (with)
 import qualified Data.Attoparsec.ByteString.Char8 as P
 import Data.Bits ((.&.))
