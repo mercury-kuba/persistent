@@ -3,9 +3,9 @@
 # 2.17.1.0
 
 * [#1600](https://github.com/yesodweb/persistent/pull/1600)
-    * Add `mockMigrateStructured` to `Database.Persist.Postgresql.Internal`.
-      This allows you to access a structured representation of the mock migrations
-      for use in yor application.
+    * Add `migrateStructured` to `Database.Persist.Postgresql.Internal`.
+      This allows you to access a structured representation of the proposed migrations
+      for use in your application.
 
 # 2.17.0.0
 
