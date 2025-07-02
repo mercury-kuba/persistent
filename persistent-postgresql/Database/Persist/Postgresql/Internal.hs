@@ -1,5 +1,5 @@
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
@@ -40,36 +40,35 @@ import qualified Database.PostgreSQL.Simple.TypeInfo.Static as PS
 import qualified Database.PostgreSQL.Simple.Types as PG
 
 import qualified Blaze.ByteString.Builder.Char8 as BBB
+import Control.Arrow
 import Control.Monad
+import Control.Monad.Except
+import Data.Acquire (with)
 import qualified Data.Attoparsec.ByteString.Char8 as P
 import Data.Bits ((.&.))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Builder as BB
 import qualified Data.ByteString.Char8 as B8
 import Data.Char (ord)
+import Data.Conduit
+import qualified Data.Conduit.List as CL
 import Data.Data (Typeable)
 import Data.Either (partitionEithers)
 import Data.Fixed (Fixed (..), Pico)
+import Data.Function (on)
 import Data.Int (Int64)
 import qualified Data.IntMap as I
-import Data.List as List (find, sort)
+import Data.List as List (find, foldl', groupBy, sort)
 import qualified Data.List.NonEmpty as NEL
+import qualified Data.Map as Map
 import Data.Maybe
 import Data.String.Conversions.Monomorphic (toStrictByteString)
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import Data.Time (NominalDiffTime, localTimeToUTC, utc)
 import Database.Persist.Sql
 import qualified Database.Persist.Sql.Util as Util
-import Control.Arrow
-import Control.Monad.Except
-import Data.Acquire (with)
-import Data.Conduit
-import qualified Data.Conduit.List as CL
-import Data.Function (on)
-import Data.List as List ( foldl', groupBy)
-import qualified Data.Map as Map
-import qualified Data.Text.Encoding as T
 
 -- | Newtype used to avoid orphan instances for @postgresql-simple@ classes.
 --
@@ -395,7 +394,7 @@ migrateStructured
     -> (Text -> IO Statement)
     -> EntityDef
     -> IO (Either [Text] [AlterDB])
-migrateStructured allDefs getter entity = do 
+migrateStructured allDefs getter entity = do
     old <- getColumns getter entity newcols'
     case partitionEithers old of
         ([], old'') -> do
@@ -1070,7 +1069,6 @@ getColumns getter def cols = do
             pure $ case col of
                 Left e -> Left e
                 Right c -> Right $ Left c
-
 
 getColumn
     :: (Text -> IO Statement)

@@ -726,7 +726,6 @@ mkForeignAlt entity fdef = case childfields of
     escapedParentFields =
         map escapeF parentfields
 
-
 -- | Get the SQL string for the table that a PersistEntity represents.
 -- Useful for raw SQL queries.
 tableName :: (PersistEntity record) => record -> Text
