@@ -76,13 +76,11 @@ import Database.PostgreSQL.Simple.Ok (Ok (..))
 import qualified Database.PostgreSQL.Simple.Transaction as PG
 import qualified Database.PostgreSQL.Simple.Types as PG
 
-import Control.Arrow
 import Control.Exception (Exception, throw, throwIO)
 import Control.Monad
 import Control.Monad.Except
-import Control.Monad.IO.Unlift (MonadIO (..), MonadUnliftIO)
+import Control.Monad.IO.Unlift (MonadUnliftIO)
 import Control.Monad.Logger (MonadLoggerIO, runNoLoggingT)
-import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Reader (ReaderT (..), asks, runReaderT)
 #if !MIN_VERSION_base(4,12,0)
 import Control.Monad.Trans.Reader (withReaderT)
@@ -91,25 +89,19 @@ import Control.Monad.Trans.Writer (WriterT (..), runWriterT)
 import qualified Data.List.NonEmpty as NEL
 import Data.Proxy (Proxy (..))
 
-import Data.Acquire (Acquire, mkAcquire, with)
+import Data.Acquire (Acquire, mkAcquire)
 import Data.Aeson
 import Data.Aeson.Types (modifyFailure)
 import qualified Data.Attoparsec.Text as AT
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as B8
 import Data.Conduit
-import qualified Data.Conduit.List as CL
 import Data.Data (Data)
 import Data.Either (partitionEithers)
-import Data.Function (on)
 import Data.IORef
 import Data.Int (Int64)
-import Data.List as List (find, foldl', groupBy, sort)
-import qualified Data.List as List
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.Map as Map
-import Data.Maybe
-import Data.Monoid ((<>))
 import qualified Data.Monoid as Monoid
 import Data.Pool (Pool)
 import Data.Text (Text)
@@ -127,11 +119,6 @@ import Database.Persist.Postgresql.Internal
 import Database.Persist.Sql
 import qualified Database.Persist.Sql.Util as Util
 import Database.Persist.SqlBackend
-import Database.Persist.SqlBackend.StatementCache
-    ( StatementCache
-    , mkSimpleStatementCache
-    , mkStatementCache
-    )
 import System.IO.Unsafe (unsafePerformIO)
 
 -- | A @libpq@ connection string.  A simple example of connection
@@ -701,30 +688,6 @@ migrate'
     -> EntityDef
     -> IO (Either [Text] CautiousMigration)
 migrate' allDefs getter entity = fmap (fmap $ map showAlterDb) $ migrateStructured allDefs getter entity
-
-mkForeignAlt
-    :: EntityDef
-    -> ForeignDef
-    -> Maybe AlterDB
-mkForeignAlt entity fdef = case childfields of
-    [] -> Nothing
-    f : r -> Just $ AlterColumn tableName_ (addReference)
-      where
-        addReference =
-            AddReference
-                (foreignRefTableDBName fdef)
-                constraintName
-                (f NEL.:| r)
-                escapedParentFields
-                (foreignFieldCascade fdef)
-  where
-    tableName_ = getEntityDBName entity
-    constraintName =
-        foreignConstraintNameDBName fdef
-    (childfields, parentfields) =
-        unzip (map (\((_, b), (_, d)) -> (b, d)) (foreignFields fdef))
-    escapedParentFields =
-        map escapeF parentfields
 
 -- | Get the SQL string for the table that a PersistEntity represents.
 -- Useful for raw SQL queries.
