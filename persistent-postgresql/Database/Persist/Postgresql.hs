@@ -79,7 +79,7 @@ import qualified Database.PostgreSQL.Simple.Types as PG
 import Control.Exception (Exception, throw, throwIO)
 import Control.Monad
 import Control.Monad.Except
-import Control.Monad.IO.Unlift (MonadIO (..),MonadUnliftIO)
+import Control.Monad.IO.Unlift (MonadIO (..), MonadUnliftIO)
 import Control.Monad.Logger (MonadLoggerIO, runNoLoggingT)
 import Control.Monad.Trans.Reader (ReaderT (..), asks, runReaderT)
 #if !MIN_VERSION_base(4,12,0)
