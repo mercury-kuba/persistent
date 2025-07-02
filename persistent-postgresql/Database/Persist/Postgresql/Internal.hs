@@ -1,4 +1,5 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
@@ -10,6 +11,7 @@ module Database.Persist.Postgresql.Internal
     , AlterTable (..)
     , AlterColumn (..)
     , SafeToRemove
+    , migrateStructured
     , mockMigrateStructured
     , addTable
     , findAlters
@@ -59,6 +61,15 @@ import qualified Data.Text as T
 import Data.Time (NominalDiffTime, localTimeToUTC, utc)
 import Database.Persist.Sql
 import qualified Database.Persist.Sql.Util as Util
+import Control.Arrow
+import Control.Monad.Except
+import Data.Acquire (with)
+import Data.Conduit
+import qualified Data.Conduit.List as CL
+import Data.Function (on)
+import Data.List as List ( foldl', groupBy)
+import qualified Data.Map as Map
+import qualified Data.Text.Encoding as T
 
 -- | Newtype used to avoid orphan instances for @postgresql-simple@ classes.
 --
@@ -372,6 +383,61 @@ data AlterDB
     | AlterColumn EntityNameDB AlterColumn
     | AlterTable EntityNameDB AlterTable
     deriving (Show)
+
+-- | Returns a structured representation of all of the
+-- DB changes required to migrate the Entity from its
+-- current state in the database to the state described in
+-- Haskell.
+--
+-- @since 2.17.1.0
+migrateStructured
+    :: [EntityDef]
+    -> (Text -> IO Statement)
+    -> EntityDef
+    -> IO (Either [Text] [AlterDB])
+migrateStructured allDefs getter entity = do 
+    old <- getColumns getter entity newcols'
+    case partitionEithers old of
+        ([], old'') -> do
+            exists' <-
+                if null old
+                    then doesTableExist getter name
+                    else return True
+            return $ Right $ migrationText exists' old''
+        (errs, _) -> return $ Left errs
+  where
+    name = getEntityDBName entity
+    (newcols', udefs, fdefs) = postgresMkColumns allDefs entity
+    migrationText exists' old''
+        | not exists' =
+            createText newcols fdefs udspair
+        | otherwise =
+            let
+                (acs, ats) =
+                    getAlters allDefs entity (newcols, udspair) old'
+                acs' = map (AlterColumn name) acs
+                ats' = map (AlterTable name) ats
+             in
+                acs' ++ ats'
+      where
+        old' = partitionEithers old''
+        newcols = filter (not . safeToRemove entity . cName) newcols'
+        udspair = map udToPair udefs
+    -- Check for table existence if there are no columns, workaround
+    -- for https://github.com/yesodweb/persistent/issues/152
+
+    createText newcols fdefs_ udspair =
+        (addTable newcols entity) : uniques ++ references ++ foreignsAlt
+      where
+        uniques = flip concatMap udspair $ \(uname, ucols) ->
+            [AlterTable name $ AddUniqueConstraint uname ucols]
+        references =
+            mapMaybe
+                ( \Column{cName, cReference} ->
+                    getAddReference allDefs entity cName =<< cReference
+                )
+                newcols
+        foreignsAlt = mapMaybe (mkForeignAlt entity) fdefs_
 
 -- | Returns a structured representation of all of the
 -- DB changes required to migrate the Entity from its
@@ -908,3 +974,319 @@ findAlters defs edef col@(Column name isNull sqltype def _gen _defConstraintName
                     ( modRef ++ modDef ++ modNull ++ modType ++ dropSafe
                     , filter (\c -> cName c /= name) cols
                     )
+
+-- | Returns all of the columns in the given table currently in the database.
+getColumns
+    :: (Text -> IO Statement)
+    -> EntityDef
+    -> [Column]
+    -> IO [Either Text (Either Column (ConstraintNameDB, [FieldNameDB]))]
+getColumns getter def cols = do
+    let
+        sqlv =
+            T.concat
+                [ "SELECT "
+                , "column_name "
+                , ",is_nullable "
+                , ",COALESCE(domain_name, udt_name)" -- See DOMAINS below
+                , ",column_default "
+                , ",generation_expression "
+                , ",numeric_precision "
+                , ",numeric_scale "
+                , ",character_maximum_length "
+                , "FROM information_schema.columns "
+                , "WHERE table_catalog=current_database() "
+                , "AND table_schema=current_schema() "
+                , "AND table_name=? "
+                ]
+
+    -- DOMAINS Postgres supports the concept of domains, which are data types
+    -- with optional constraints.  An app might make an "email" domain over the
+    -- varchar type, with a CHECK that the emails are valid In this case the
+    -- generated SQL should use the domain name: ALTER TABLE users ALTER COLUMN
+    -- foo TYPE email This code exists to use the domain name (email), instead
+    -- of the underlying type (varchar).  This is tested in
+    -- EquivalentTypeTest.hs
+
+    stmt <- getter sqlv
+    let
+        vals =
+            [ PersistText $ unEntityNameDB $ getEntityDBName def
+            ]
+    columns <-
+        with
+            (stmtQuery stmt vals)
+            (\src -> runConduit $ src .| processColumns .| CL.consume)
+    let
+        sqlc =
+            T.concat
+                [ "SELECT "
+                , "c.constraint_name, "
+                , "c.column_name "
+                , "FROM information_schema.key_column_usage AS c, "
+                , "information_schema.table_constraints AS k "
+                , "WHERE c.table_catalog=current_database() "
+                , "AND c.table_catalog=k.table_catalog "
+                , "AND c.table_schema=current_schema() "
+                , "AND c.table_schema=k.table_schema "
+                , "AND c.table_name=? "
+                , "AND c.table_name=k.table_name "
+                , "AND c.constraint_name=k.constraint_name "
+                , "AND NOT k.constraint_type IN ('PRIMARY KEY', 'FOREIGN KEY') "
+                , "ORDER BY c.constraint_name, c.column_name"
+                ]
+
+    stmt' <- getter sqlc
+
+    us <- with (stmtQuery stmt' vals) (\src -> runConduit $ src .| helperU)
+    return $ columns ++ us
+  where
+    refMap =
+        fmap (\cr -> (crTableName cr, crConstraintName cr)) $
+            Map.fromList $
+                List.foldl' ref [] cols
+      where
+        ref rs c =
+            maybe rs (\r -> (unFieldNameDB $ cName c, r) : rs) (cReference c)
+    getAll =
+        CL.mapM $ \x ->
+            pure $ case x of
+                [PersistText con, PersistText col] ->
+                    (con, col)
+                [PersistByteString con, PersistByteString col] ->
+                    (T.decodeUtf8 con, T.decodeUtf8 col)
+                o ->
+                    error $ "unexpected datatype returned for postgres o=" ++ show o
+    helperU = do
+        rows <- getAll .| CL.consume
+        return
+            $ map
+                (Right . Right . (ConstraintNameDB . fst . head &&& map (FieldNameDB . snd)))
+            $ groupBy ((==) `on` fst) rows
+    processColumns =
+        CL.mapM $ \x'@((PersistText cname) : _) -> do
+            col <-
+                liftIO $ getColumn getter (getEntityDBName def) x' (Map.lookup cname refMap)
+            pure $ case col of
+                Left e -> Left e
+                Right c -> Right $ Left c
+
+
+getColumn
+    :: (Text -> IO Statement)
+    -> EntityNameDB
+    -> [PersistValue]
+    -> Maybe (EntityNameDB, ConstraintNameDB)
+    -> IO (Either Text Column)
+getColumn
+    getter
+    tableName'
+    [ PersistText columnName
+        , PersistText isNullable
+        , PersistText typeName
+        , defaultValue
+        , generationExpression
+        , numericPrecision
+        , numericScale
+        , maxlen
+        ]
+    refName_ = runExceptT $ do
+        defaultValue' <-
+            case defaultValue of
+                PersistNull ->
+                    pure Nothing
+                PersistText t ->
+                    pure $ Just t
+                _ ->
+                    throwError $ T.pack $ "Invalid default column: " ++ show defaultValue
+
+        generationExpression' <-
+            case generationExpression of
+                PersistNull ->
+                    pure Nothing
+                PersistText t ->
+                    pure $ Just t
+                _ ->
+                    throwError $ T.pack $ "Invalid generated column: " ++ show generationExpression
+
+        let
+            typeStr =
+                case maxlen of
+                    PersistInt64 n ->
+                        T.concat [typeName, "(", T.pack (show n), ")"]
+                    _ ->
+                        typeName
+
+        t <- getType typeStr
+
+        let
+            cname = FieldNameDB columnName
+
+        ref <- lift $ fmap join $ traverse (getRef cname) refName_
+
+        return
+            Column
+                { cName = cname
+                , cNull = isNullable == "YES"
+                , cSqlType = t
+                , cDefault = fmap stripSuffixes defaultValue'
+                , cGenerated = fmap stripSuffixes generationExpression'
+                , cDefaultConstraintName = Nothing
+                , cMaxLen = Nothing
+                , cReference = fmap (\(a, b, c, d) -> ColumnReference a b (mkCascade c d)) ref
+                }
+      where
+        mkCascade updText delText =
+            FieldCascade
+                { fcOnUpdate = parseCascade updText
+                , fcOnDelete = parseCascade delText
+                }
+
+        parseCascade txt =
+            case txt of
+                "NO ACTION" ->
+                    Nothing
+                "CASCADE" ->
+                    Just Cascade
+                "SET NULL" ->
+                    Just SetNull
+                "SET DEFAULT" ->
+                    Just SetDefault
+                "RESTRICT" ->
+                    Just Restrict
+                _ ->
+                    error $ "Unexpected value in parseCascade: " <> show txt
+
+        stripSuffixes t =
+            loop'
+                [ "::character varying"
+                , "::text"
+                ]
+          where
+            loop' [] = t
+            loop' (p : ps) =
+                case T.stripSuffix p t of
+                    Nothing -> loop' ps
+                    Just t' -> t'
+
+        getRef cname (_, refName') = do
+            let
+                sql =
+                    T.concat
+                        [ "SELECT DISTINCT "
+                        , "ccu.table_name, "
+                        , "tc.constraint_name, "
+                        , "rc.update_rule, "
+                        , "rc.delete_rule "
+                        , "FROM information_schema.constraint_column_usage ccu "
+                        , "INNER JOIN information_schema.key_column_usage kcu "
+                        , "  ON ccu.constraint_name = kcu.constraint_name "
+                        , "INNER JOIN information_schema.table_constraints tc "
+                        , "  ON tc.constraint_name = kcu.constraint_name "
+                        , "LEFT JOIN information_schema.referential_constraints AS rc"
+                        , "  ON rc.constraint_name = ccu.constraint_name "
+                        , "WHERE tc.constraint_type='FOREIGN KEY' "
+                        , "AND kcu.ordinal_position=1 "
+                        , "AND kcu.table_name=? "
+                        , "AND kcu.column_name=? "
+                        , "AND tc.constraint_name=?"
+                        ]
+            stmt <- getter sql
+            cntrs <-
+                with
+                    ( stmtQuery
+                        stmt
+                        [ PersistText $ unEntityNameDB tableName'
+                        , PersistText $ unFieldNameDB cname
+                        , PersistText $ unConstraintNameDB refName'
+                        ]
+                    )
+                    (\src -> runConduit $ src .| CL.consume)
+            case cntrs of
+                [] ->
+                    return Nothing
+                [ [ PersistText table
+                        , PersistText constraint
+                        , PersistText updRule
+                        , PersistText delRule
+                        ]
+                    ] ->
+                        return $
+                            Just (EntityNameDB table, ConstraintNameDB constraint, updRule, delRule)
+                xs ->
+                    error $
+                        mconcat
+                            [ "Postgresql.getColumn: error fetching constraints. Expected a single result for foreign key query for table: "
+                            , T.unpack (unEntityNameDB tableName')
+                            , " and column: "
+                            , T.unpack (unFieldNameDB cname)
+                            , " but got: "
+                            , show xs
+                            ]
+
+        getType "int4" = pure SqlInt32
+        getType "int8" = pure SqlInt64
+        getType "varchar" = pure SqlString
+        getType "text" = pure SqlString
+        getType "date" = pure SqlDay
+        getType "bool" = pure SqlBool
+        getType "timestamptz" = pure SqlDayTime
+        getType "float4" = pure SqlReal
+        getType "float8" = pure SqlReal
+        getType "bytea" = pure SqlBlob
+        getType "time" = pure SqlTime
+        getType "numeric" = getNumeric numericPrecision numericScale
+        getType a = pure $ SqlOther a
+
+        getNumeric (PersistInt64 a) (PersistInt64 b) =
+            pure $ SqlNumeric (fromIntegral a) (fromIntegral b)
+        getNumeric PersistNull PersistNull =
+            throwError $
+                T.concat
+                    [ "No precision and scale were specified for the column: "
+                    , columnName
+                    , " in table: "
+                    , unEntityNameDB tableName'
+                    , ". Postgres defaults to a maximum scale of 147,455 and precision of 16383,"
+                    , " which is probably not what you intended."
+                    , " Specify the values as numeric(total_digits, digits_after_decimal_place)."
+                    ]
+        getNumeric a b =
+            throwError $
+                T.concat
+                    [ "Can not get numeric field precision for the column: "
+                    , columnName
+                    , " in table: "
+                    , unEntityNameDB tableName'
+                    , ". Expected an integer for both precision and scale, "
+                    , "got: "
+                    , T.pack $ show a
+                    , " and "
+                    , T.pack $ show b
+                    , ", respectively."
+                    , " Specify the values as numeric(total_digits, digits_after_decimal_place)."
+                    ]
+getColumn _ _ columnName _ =
+    return $
+        Left $
+            T.pack $
+                "Invalid result from information_schema: " ++ show columnName
+
+doesTableExist
+    :: (Text -> IO Statement)
+    -> EntityNameDB
+    -> IO Bool
+doesTableExist getter (EntityNameDB name) = do
+    stmt <- getter sql
+    with (stmtQuery stmt vals) (\src -> runConduit $ src .| start)
+  where
+    sql =
+        "SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE schemaname != 'pg_catalog'"
+            <> " AND schemaname != 'information_schema' AND tablename=?"
+    vals = [PersistText name]
+
+    start = await >>= maybe (error "No results when checking doesTableExist") start'
+    start' [PersistInt64 0] = finish False
+    start' [PersistInt64 1] = finish True
+    start' res = error $ "doesTableExist returned unexpected result: " ++ show res
+    finish x = await >>= maybe (return x) (error "Too many rows returned in doesTableExist")
