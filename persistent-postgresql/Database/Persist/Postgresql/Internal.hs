@@ -439,31 +439,20 @@ migrateStructured allDefs getter entity = do
         foreignsAlt = mapMaybe (mkForeignAlt entity) fdefs_
 
 -- | Returns a structured representation of all of the
--- DB changes required to migrate the Entity from its
--- current state in the database to the state described in
--- Haskell.
+-- DB changes required to migrate the Entity to the state
+-- described in Haskell, assuming it currently does not
+-- exist in the database.
 --
 -- @since 2.17.1.0
 mockMigrateStructured
     :: [EntityDef]
     -> EntityDef
     -> IO (Either [Text] [AlterDB])
-mockMigrateStructured allDefs entity =
-    return $ Right $ migrationText False []
+mockMigrateStructured allDefs entity = return $ Right migrationText
   where
     name = getEntityDBName entity
-    migrationText exists' old'' =
-        if not exists'
-            then createText newcols fdefs udspair
-            else
-                let
-                    (acs, ats) = getAlters allDefs entity (newcols, udspair) old'
-                    acs' = map (AlterColumn name) acs
-                    ats' = map (AlterTable name) ats
-                 in
-                    acs' ++ ats'
+    migrationText = createText newcols fdefs udspair
       where
-        old' = partitionEithers old''
         (newcols', udefs, fdefs) = postgresMkColumns allDefs entity
         newcols = filter (not . safeToRemove entity . cName) newcols'
         udspair = map udToPair udefs
