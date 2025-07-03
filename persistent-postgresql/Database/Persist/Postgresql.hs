@@ -825,7 +825,11 @@ mockMigrate
     -> (Text -> IO Statement)
     -> EntityDef
     -> IO (Either [Text] [(Bool, Text)])
-mockMigrate allDefs _ entity = fmap (fmap $ map showAlterDb) $ return $ Right $ mockMigrateStructured allDefs entity
+mockMigrate allDefs _ entity =
+    fmap (fmap $ map showAlterDb) $
+        return $
+            Right $
+                mockMigrateStructured allDefs entity
 
 -- | Mock a migration even when the database is not present.
 -- This function performs the same functionality of 'printMigration'
