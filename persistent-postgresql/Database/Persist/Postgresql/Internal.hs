@@ -449,8 +449,8 @@ migrateStructured allDefs getter entity = do
 mockMigrateStructured
     :: [EntityDef]
     -> EntityDef
-    -> IO (Either [Text] [AlterDB])
-mockMigrateStructured allDefs entity = return $ Right migrationText
+    -> [AlterDB]
+mockMigrateStructured allDefs entity = migrationText
   where
     name = getEntityDBName entity
     migrationText = createText newcols fdefs udspair
