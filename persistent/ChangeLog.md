@@ -1,12 +1,5 @@
 # Changelog for persistent
 
-# 2.17.1.0
-
-* [#1600](https://github.com/yesodweb/persistent/pull/1600)
-    * Add `migrateStructured` to `Database.Persist.Postgresql.Internal`.
-      This allows you to access a structured representation of the proposed migrations
-      for use in your application.
-
 # 2.17.0.0
 
 * [#1595](https://github.com/yesodweb/persistent/pull/1595)
