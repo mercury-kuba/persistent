@@ -345,7 +345,7 @@ instance PersistFieldSql PgInterval where
 --
 -- @since 2.17.1.0
 newtype SafeToRemove = SafeToRemove Bool
-    deriving (Show)
+    deriving (Show, Eq)
 
 -- | Represents a change to a Postgres column in a DB statement.
 --
@@ -366,7 +366,7 @@ data AlterColumn
         [Text]
         FieldCascade
     | DropReference ConstraintNameDB
-    deriving (Show)
+    deriving (Show, Eq)
 
 -- | Represents a change to a Postgres table in a DB statement.
 --
@@ -374,7 +374,7 @@ data AlterColumn
 data AlterTable
     = AddUniqueConstraint ConstraintNameDB [FieldNameDB]
     | DropConstraint ConstraintNameDB
-    deriving (Show)
+    deriving (Show, Eq)
 
 -- | Represents a change to a Postgres DB in a statement.
 --
@@ -383,7 +383,7 @@ data AlterDB
     = AddTable EntityNameDB EntityIdDef [Column]
     | AlterColumn EntityNameDB AlterColumn
     | AlterTable EntityNameDB AlterTable
-    deriving (Show)
+    deriving (Show, Eq)
 
 -- | Returns a structured representation of all of the
 -- DB changes required to migrate the Entity from its
